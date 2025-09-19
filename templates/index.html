@@ -1,184 +1,117 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Lambo Gift — Plinko</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lambo Gift Plinko 🎲</title>
   <style>
-    body{font-family:Arial,sans-serif;background:#0b0b0b;color:#fff;text-align:center;padding:16px}
-    canvas{background:#111;border:2px solid #ffcc00;border-radius:8px;display:block;margin:12px auto}
-    button,input{padding:10px 14px;font-size:16px;border-radius:8px;border:0}
-    button{background:#ffcc00;color:#000;cursor:pointer}
-    input{width:120px;text-align:center;margin-right:8px}
-    #status{margin-top:12px;color:#ffd700}
+    body {
+      background: #111;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    h1 {
+      margin: 20px 0;
+    }
+    #plinko {
+      margin: 20px auto;
+      width: 300px;
+      height: 400px;
+      border: 2px solid #fff;
+      position: relative;
+      background: #222;
+    }
+    .ball {
+      width: 14px;
+      height: 14px;
+      background: #ff0;
+      border-radius: 50%;
+      position: absolute;
+    }
+    .slot {
+      width: 30px;
+      height: 30px;
+      border: 1px solid #fff;
+      position: absolute;
+      bottom: 0;
+      text-align: center;
+      line-height: 30px;
+      font-size: 12px;
+    }
+    button {
+      margin: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      background: #0f0;
+      border: none;
+      border-radius: 8px;
+    }
   </style>
 </head>
 <body>
-  <h1>🎯 Lambo Gift — Plinko</h1>
+  <h1>🎮 Lambo Gift Plinko</h1>
+  <div id="plinko"></div>
+  <button onclick="dropBall()">Кинуть шарик 🎲</button>
+  <p id="result"></p>
 
-  <div>
-    <strong>Баланс: </strong><span id="balance">—</span> <span style="color:#999">монет</span>
-  </div>
+  <script>
+    const plinko = document.getElementById("plinko");
+    const slots = [0.2, 0.5, 1, 2, 5, 10, 2, 1, 0.5, 0.2]; // множители
+    const userId = "{{ user_id }}"; // Flask подставит Telegram ID
 
-  <div style="margin-top:10px">
-    <input id="bet" type="number" min="1" step="1" value="100" />
-    <button id="dropBtn">Запустить шарик</button>
-  </div>
+    // Рисуем слоты
+    slots.forEach((mult, i) => {
+      const slot = document.createElement("div");
+      slot.className = "slot";
+      slot.style.left = `${i * 30}px`;
+      slot.innerText = "x" + mult;
+      plinko.appendChild(slot);
+    });
 
-  <canvas id="plinko" width="400" height="450"></canvas>
+    function dropBall() {
+      const ball = document.createElement("div");
+      ball.className = "ball";
+      ball.style.left = "140px";
+      ball.style.top = "0px";
+      plinko.appendChild(ball);
 
-  <div id="status"></div>
+      let posX = 140;
+      let posY = 0;
+      const interval = setInterval(() => {
+        posY += 5;
+        posX += (Math.random() > 0.5 ? 5 : -5);
+        ball.style.top = posY + "px";
+        ball.style.left = posX + "px";
 
-<script>
-(async function(){
-  // Telegram WebApp объект
-  const tg = window.Telegram?.WebApp;
-  // initDataUnsafe содержит разобранный объект user (если открыт как WebApp).
-  const userInfo = tg?.initDataUnsafe?.user ?? null;
-  const userId = userInfo ? String(userInfo.id) : null;
+        if (posY >= 370) {
+          clearInterval(interval);
+          const slotIndex = Math.min(
+            Math.max(Math.floor(posX / 30), 0),
+            slots.length - 1
+          );
+          const multiplier = slots[slotIndex];
+          document.getElementById("result").innerText =
+            "Вы попали в x" + multiplier;
 
-  const statusEl = document.getElementById('status');
-  const balanceEl = document.getElementById('balance');
-  const betInput = document.getElementById('bet');
-  const dropBtn = document.getElementById('dropBtn');
-
-  if(!userId){
-    statusEl.innerText = "⚠️ Открой игру через кнопку 'Играть' в боте, чтобы привязать аккаунт.";
-    // опционально: при открытии в обычном браузере можно запросить user_id вручную
-  } else {
-    statusEl.innerText = "Пользователь: " + (userInfo.username ? "@"+userInfo.username : userId);
-  }
-
-  // функция загрузки баланса у сервера
-  async function loadBalance(){
-    if(!userId) return;
-    try{
-      const res = await fetch('/get_balance', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({user_id: userId})
-      });
-      const j = await res.json();
-      balanceEl.innerText = j.balance;
-    }catch(e){
-      console.error(e);
-      statusEl.innerText = "Ошибка связи с сервером";
+          saveResult(multiplier);
+        }
+      }, 30);
     }
-  }
 
-  // === Plinko canvas (упрощённый визуал) ===
-  const canvas = document.getElementById('plinko');
-  const ctx = canvas.getContext('2d');
-
-  const slots = [0, 0.5, 1, 2, 5, 10]; // множители
-  const slotW = canvas.width / slots.length;
-  let ball = null;
-
-  function draw(){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    // верхний заголовок/сетку (можно расширить)
-    // рисуем слоты
-    for(let i=0;i<slots.length;i++){
-      ctx.fillStyle = '#222';
-      ctx.fillRect(i*slotW, canvas.height-60, slotW-2, 60);
-      ctx.strokeStyle = '#ffcc00';
-      ctx.strokeRect(i*slotW, canvas.height-60, slotW-2, 60);
-      ctx.fillStyle = '#fff';
-      ctx.font = "16px Arial";
-      ctx.fillText("x"+slots[i], i*slotW + slotW/2 - 10, canvas.height-28);
+    function saveResult(score) {
+      fetch("/save_result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, score: score }),
+      })
+        .then((res) => res.json())
+        .then((data) => console.log("Сохранено:", data))
+        .catch((err) => console.error("Ошибка сохранения:", err));
     }
-    // шарик
-    if(ball){
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, 10, 0, Math.PI*2);
-      ctx.fillStyle = '#ffcc00';
-      ctx.fill();
-      ctx.closePath();
-    }
-  }
-
-  function animateDrop(){
-    if(!ball) return;
-    ball.vy += 0.4;
-    // небольшая случайная горизонтальная дрожь, чтобы имитировать отскоки
-    ball.x += ball.vx + (Math.random()-0.5)*1.2;
-    ball.y += ball.vy;
-
-    // если дошёл до зоны слотов
-    if(ball.y >= canvas.height - 70){
-      // определяем слот по координате x (границы)
-      const idx = Math.max(0, Math.min(slots.length-1, Math.floor(ball.x / slotW)));
-      const multiplier = slots[idx];
-      finishRound(multiplier);
-      ball = null;
-      return;
-    }
-    draw();
-    requestAnimationFrame(animateDrop);
-  }
-
-  // завершение раунда: отправляем результат на сервер
-  async function finishRound(multiplier){
-    const bet = parseInt(betInput.value) || 0;
-    if(!userId){
-      statusEl.innerText = "Невозможно записать результат: user_id не найден.";
-      return;
-    }
-    statusEl.innerText = `Шарик упал в x${multiplier} — отправляем результат...`;
-
-    try{
-      const res = await fetch('/update_balance', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ user_id: userId, bet: bet, multiplier: multiplier })
-      });
-      const j = await res.json();
-      balanceEl.innerText = j.new_balance ?? j.balance ?? '—';
-      statusEl.innerHTML = `Результат: x${multiplier}. Выигрыш: ${j.win}. Новый баланс: ${j.new_balance ?? j.balance}`;
-    }catch(err){
-      console.error(err);
-      statusEl.innerText = "Ошибка при отправке результата на сервер.";
-    }
-  }
-
-  // кнопка запуска: создаём шарик с небольшими вариациями по x
-  dropBtn.addEventListener('click', async ()=>{
-    const bet = parseInt(betInput.value) || 0;
-    if(!userId){
-      alert("Открой игру через кнопку бота, иначе привязка не сработает.");
-      return;
-    }
-    // проверим баланс на сервер перед броском
-    try{
-      const res = await fetch('/get_balance', {
-        method:'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({user_id: userId})
-      });
-      const j = await res.json();
-      const bal = j.balance;
-      if(bet <=0 || bet !== Math.floor(bet)){
-        alert("Укажи корректную ставку (целое число).");
-        return;
-      }
-      if(bet > bal){
-        alert("Недостаточно средств.");
-        return;
-      }
-      // создаём шарик
-      ball = { x: canvas.width/2 + (Math.random()-0.5)*40, y: 30, vx: (Math.random()-0.5)*1.2, vy: 1.5 };
-      draw();
-      requestAnimationFrame(animateDrop);
-    }catch(e){
-      console.error(e);
-      alert("Ошибка связи с сервером.");
-    }
-  });
-
-  // начальная загрузка баланса
-  await loadBalance();
-  draw();
-})();
-</script>
+  </script>
 </body>
 </html>

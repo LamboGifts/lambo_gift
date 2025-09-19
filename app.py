@@ -1,37 +1,34 @@
+import os
 from flask import Flask, request
 from telegram import Update
-from telegram.ext import Application
+from telegram.ext import Application, CommandHandler
 
-TOKEN = "7678954168:AAG6755ngOoYcQfIt6viZKMRXRcv6dOd0vY"
+# токен бота из Render Environment (чтобы не палить его в коде)
+TOKEN = os.getenv("TELEGRAM_TOKEN")
 
+# создаем Flask
 app = Flask(__name__)
 
-# создаём Application (асинхронный бот)
+# создаем Telegram Application
 application = Application.builder().token(TOKEN).build()
-
 
 # команда /start
 async def start(update: Update, context):
-    await update.message.reply_text("Привет! Бот работает ✅")
+    await update.message.reply_text("Привет! Бот работает через webhook 🚀")
 
+application.add_handler(CommandHandler("start", start))
 
-application.add_handler(
-    __import__("telegram.ext").CommandHandler("start", start)
-)
-
-
+# Flask route для webhook
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
-    application.update_queue.put_nowait(update)  # асинхронно
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put_nowait(update)
     return "ok", 200
 
-
-@app.route("/", methods=["GET"])
+# healthcheck
+@app.route("/")
 def home():
-    return "🔥 Webhook бот работает!"
-
+    return "Бот жив ✅", 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))

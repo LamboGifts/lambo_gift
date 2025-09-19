@@ -1,4 +1,4 @@
 python-telegram-bot==20.3
 Flask==2.3.2
 gunicorn==20.1.0
-imghdr-py==0.3.0
+
